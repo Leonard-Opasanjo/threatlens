@@ -1,0 +1,4 @@
+# Synthetic URLs, matched exactly after normalisation.
+http://malware-c2.example/panel/gate.php
+https://login-update.example/secure/verify
+http://203.0.113.45/update.exe

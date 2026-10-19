@@ -1,0 +1,15 @@
+value,type,source,tags,first_seen
+203.0.113.45,ip,siem-ticket-4471,"ssh-bruteforce,bastion",2026-10-15
+hxxp://malware-c2[.]example/panel/gate.php,url,edr-alert-8810,c2,2026-10-17
+login-update.example,domain,phishing-report,phishing,2026-10-18
+0f3a7c1e2b9d4a6f8c0e1d2b3a4c5d6e,hash,edr-alert-8810,dropper,2026-10-17
+https://cdn-assets-update.xyz/dl/setup.exe,url,proxy-log,download,2026-10-18
+http://198.51.100.200/a.php,url,proxy-log,,2026-10-18
+xn--pple-43d.com,domain,phishing-report,lookalike,2026-10-18
+akq9x2mz7vbh3qp.top,domain,dns-log,dga,2026-10-18
+10.0.1.77,ip,siem-ticket-4471,internal,2026-10-16
+google.com,domain,proxy-log,,2026-10-18
+update.microsoft.com,domain,proxy-log,,2026-10-18
+9f2c0b4a8e6d1c3b5a7f9e0d2c4b6a8f1e3d5c7b9a0f2e4d6c8b0a1f3e5d7c9b,sha256,edr-alert-8810,payload,2026-10-17
+files.payroll-portal.example,domain,mail-gateway,phishing,2026-10-19
+192.0.2.10,ip,honeypot,,2026-10-19

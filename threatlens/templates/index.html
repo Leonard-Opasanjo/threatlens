@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>Import indicators</h1>
+<div class="card">
+  <form method="post" action="/import" enctype="multipart/form-data">
+    <label class="block">Paste indicators (one per line, or any text containing them; defanged forms are fine)</label>
+    <textarea name="text" placeholder="hxxp://malware-c2[.]example/panel/gate.php&#10;203.0.113.45&#10;login-update.example&#10;0f3a7c1e2b9d4a6f8c0e1d2b3a4c5d6e"></textarea>
+    <div class="inline" style="display:flex;gap:1rem;align-items:center;margin-top:.6rem;flex-wrap:wrap">
+      <label>or upload <input type="file" name="file" accept=".csv,.json,.txt,.log"></label>
+      <label>format <select name="fmt"><option value="auto">auto</option><option value="text">text</option><option value="csv">CSV</option><option value="json">JSON</option></select></label>
+      <input type="text" name="source" placeholder="source label (e.g. SOC ticket 4471)">
+      <label class="check"><input type="checkbox" name="online" value="yes"> also fetch online feeds and resolve DNS</label>
+      <button type="submit">Import and enrich</button>
+    </div>
+    <p class="muted" style="margin:.6rem 0 0;font-size:.88rem">Offline by default: structural checks and the bundled list feeds. The online option downloads the configured abuse.ch feeds and performs DNS lookups. ThreatLens never visits a URL and never opens a file.</p>
+  </form>
+</div>
+
+<h2>Overview</h2>
+<div class="card stats">
+  <div><b>{{ stats.total }}</b><span class="muted">indicators</span></div>
+  <div><b style="color:var(--critical)">{{ stats.verdict.malicious }}</b><span class="muted">malicious</span></div>
+  <div><b style="color:var(--medium)">{{ stats.verdict.suspicious }}</b><span class="muted">suspicious</span></div>
+  <div><b style="color:var(--low)">{{ stats.verdict.benign }}</b><span class="muted">benign</span></div>
+  <div><b>{{ stats.verdict.unknown }}</b><span class="muted">unknown</span></div>
+  <div><b>{{ stats.imports }}</b><span class="muted">imports</span></div>
+</div>
+
+<h2>Recent imports</h2>
+<div class="card">
+{% if not imports %}<p class="muted">No imports yet. Run <code>threatlens demo</code> to load the sample files.</p>
+{% else %}
+<table><tr><th>#</th><th>Name</th><th>When</th><th>Indicators</th><th>New</th><th>Updated</th><th>Derived</th><th class="hide-sm">Online</th><th></th></tr>
+{% for i in imports %}
+<tr><td><a href="/imports/{{ i.id }}">{{ i.id }}</a></td><td><a href="/imports/{{ i.id }}">{{ i.name }}</a></td><td class="muted">{{ i.at|replace("T", " ") }}</td>
+<td>{{ i.total }}</td><td>{{ i.new }}</td><td>{{ i.updated }}</td><td>{{ i.derived }}</td><td class="hide-sm">{{ "yes" if i.online else "no" }}</td>
+<td><a href="/imports/{{ i.id }}/report.md">report</a></td></tr>
+{% endfor %}
+</table>
+{% endif %}
+</div>
+{% endblock %}

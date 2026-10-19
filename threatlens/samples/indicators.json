@@ -1,0 +1,9 @@
+{"indicators": [
+  {"value": "198.51.100.23", "type": "ip", "source": "partner-share", "tags": ["scanner"]},
+  {"value": "https://login-update.example/secure/verify", "type": "url", "source": "partner-share", "tags": ["phishing"]},
+  {"value": "5d41402abc4b2a76b9719d911017c592aa7b6c4d", "type": "sha1", "source": "partner-share"},
+  {"value": "bit.ly/3xmplz", "source": "mail-gateway"},
+  {"value": "https://github.com/Leonard-Opasanjo/threatlens", "source": "proxy-log"},
+  "203.0.113.9",
+  "mail.example.org"
+]}

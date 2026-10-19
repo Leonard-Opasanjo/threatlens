@@ -1,0 +1,4 @@
+# Synthetic hashes (random hex), one per line. md5, sha1 and sha256 lengths are all accepted.
+0f3a7c1e2b9d4a6f8c0e1d2b3a4c5d6e
+5d41402abc4b2a76b9719d911017c592aa7b6c4d
+9f2c0b4a8e6d1c3b5a7f9e0d2c4b6a8f1e3d5c7b9a0f2e4d6c8b0a1f3e5d7c9b

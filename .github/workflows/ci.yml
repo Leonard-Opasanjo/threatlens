@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: python -m pip install -U pip setuptools && pip install -e ".[dev]"
+      - name: Lint
+        run: ruff check .
+      - name: Tests (offline)
+        run: pytest
+      - name: Bandit
+        run: bandit -q -c pyproject.toml -r threatlens
+      - name: Dependency audit
+        run: pip-audit
+
+  security:
+    uses: Leonard-Opasanjo/secureflow-devsecops/.github/workflows/secureflow.yml@main
+    permissions:
+      contents: read
+      security-events: write
+      pull-requests: write
+    with:
+      fail-on: high
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: docker build -t threatlens .
+      - name: Smoke test the image
+        run: |
+          docker run -d --name tl -p 8000:8000 threatlens
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8000/healthz && break; sleep 1; done
+          curl -sf http://127.0.0.1:8000/ | grep -q "ThreatLens"
+          docker exec tl threatlens demo --db /data/demo.db
+          docker rm -f tl

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}{{ row.value|defang(row.type) }} · ThreatLens{% endblock %}
+{% block body %}
+<p class="muted"><a href="/indicators">Indicators</a> › {{ row.type }}</p>
+<h1><span class="sev {{ row.severity }}">{{ row.severity }}</span> <span class="mono" style="font-size:1.2rem">{{ row.value|defang(row.type) }}</span></h1>
+<div class="card">
+  <table>
+    <tr><th>Verdict</th><td><span class="verdict {{ row.verdict }}">{{ row.verdict }}</span> · confidence {{ row.confidence }}</td></tr>
+    <tr><th>Type</th><td>{{ row.type }}{% if row.derived_from %} · derived from <span class="mono">{{ row.derived_from }}</span>{% endif %}</td></tr>
+    <tr><th>Submitted as</th><td class="mono">{{ row.raw or row.value }}</td></tr>
+    <tr><th>Source</th><td>{{ row.source or "—" }}{% if row.first_seen %} · first seen {{ row.first_seen }}{% endif %} · last seen {{ row.last_seen|replace("T", " ") }} · seen {{ row.times_seen }}×</td></tr>
+    <tr><th>Tags</th><td>{% for t in row.tags %}<span class="pill">{{ t }}</span> {% endfor %}{% if not row.tags %}—{% endif %}</td></tr>
+    <tr><th>Status</th><td>{{ row.status|replace("_", " ") }}{% if row.note %} · {{ row.note }}{% endif %}</td></tr>
+  </table>
+</div>
+
+<h2>Signals</h2>
+<div class="card">
+{% for s in row.signals %}<div class="sig"><span class="verdict {{ s.verdict }}">{{ s.verdict }}</span> <strong>{{ s.source }}</strong>{% if s.weight %} <span class="muted">weight {{ s.weight }}</span>{% endif %}<br>{{ s.note }}</div>{% endfor %}
+{% if not row.signals %}<p class="muted">No source had anything to say about this indicator.</p>{% endif %}
+</div>
+
+<h2>Related indicators</h2>
+<div class="card">
+{% if not row.related %}<p class="muted">None.</p>{% else %}
+<table><tr><th>Severity</th><th>Verdict</th><th>Type</th><th>Indicator</th></tr>
+{% for r in row.related %}<tr><td><span class="sev {{ r.severity }}">{{ r.severity }}</span></td><td>{{ r.verdict }}</td><td>{{ r.type }}</td><td class="mono"><a href="/indicators/{{ r.id }}">{{ r.value|defang(r.type) }}</a></td></tr>{% endfor %}
+</table>{% endif %}
+</div>
+
+<h2>Analyst status</h2>
+<div class="card">
+<form class="inline" method="post" action="/indicators/{{ row.id }}/status">
+  <select name="status">{% for s in statuses %}<option value="{{ s }}" {% if s == row.status %}selected{% endif %}>{{ s|replace("_", " ") }}</option>{% endfor %}</select>
+  <input type="text" name="note" value="{{ row.note }}" placeholder="what you checked, ticket, decision" style="flex:1;min-width:16rem">
+  <button type="submit">Save</button>
+</form>
+</div>
+{% endblock %}

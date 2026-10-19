@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Import {{ imp.id }} · ThreatLens{% endblock %}
+{% block body %}
+<p class="muted"><a href="/">Imports</a> › import {{ imp.id }}</p>
+<h1>{{ imp.name }}</h1>
+<div class="card">
+  <span class="pill">{{ imp.total }} indicators</span> <span class="pill">{{ imp.new }} new</span> <span class="pill">{{ imp.updated }} seen before</span> <span class="pill">{{ imp.derived }} hosts derived from URLs</span> <span class="pill">{{ "online sources used" if imp.online else "offline" }}</span>
+  · <a href="/imports/{{ imp.id }}/report.md">Investigation report (Markdown)</a>
+</div>
+<div class="card">
+<table><tr><th>Severity</th><th>Verdict</th><th class="hide-sm">Conf.</th><th>Type</th><th>Indicator (defanged)</th><th class="hide-sm">Tags</th></tr>
+{% for r in rows %}
+<tr><td><span class="sev {{ r.severity }}">{{ r.severity }}</span></td><td><span class="verdict {{ r.verdict }}">{{ r.verdict }}</span></td><td class="hide-sm">{{ r.confidence }}</td>
+<td>{{ r.type }}</td><td class="mono"><a href="/indicators/{{ r.id }}">{{ r.value|defang(r.type) }}</a></td><td class="hide-sm">{% for t in r.tags %}<span class="pill">{{ t }}</span> {% endfor %}</td></tr>
+{% endfor %}
+</table>
+</div>
+{% endblock %}

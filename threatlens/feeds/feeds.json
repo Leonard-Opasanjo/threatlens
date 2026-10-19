@@ -1,0 +1,16 @@
+[
+  {"name": "local-malicious-ips", "kind": "ip", "path": "malicious-ips.txt", "verdict": "malicious", "weight": 3,
+   "description": "synthetic list bundled for tests and demos"},
+  {"name": "local-malicious-domains", "kind": "domain", "path": "malicious-domains.txt", "verdict": "malicious", "weight": 3,
+   "description": "synthetic list bundled for tests and demos"},
+  {"name": "local-malicious-urls", "kind": "url", "path": "malicious-urls.txt", "verdict": "malicious", "weight": 3,
+   "description": "synthetic list bundled for tests and demos"},
+  {"name": "local-malicious-hashes", "kind": "hash", "path": "malicious-hashes.txt", "verdict": "malicious", "weight": 3,
+   "description": "synthetic list bundled for tests and demos"},
+  {"name": "allowlist-domains", "kind": "domain", "path": "allowlist-domains.txt", "verdict": "benign", "weight": 3,
+   "description": "well-known services that are not indicators on their own"},
+  {"name": "urlhaus-online", "kind": "url", "url": "https://urlhaus.abuse.ch/downloads/text_online/", "verdict": "malicious",
+   "weight": 3, "description": "abuse.ch URLhaus, URLs currently serving malware; fetched only with --online", "enabled": true},
+  {"name": "feodo-tracker", "kind": "ip", "url": "https://feodotracker.abuse.ch/downloads/ipblocklist.txt", "verdict": "malicious",
+   "weight": 3, "description": "abuse.ch Feodo Tracker botnet C2 addresses; fetched only with --online", "enabled": true}
+]

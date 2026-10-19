@@ -1,0 +1,5 @@
+# Synthetic domains under reserved names (.example, .invalid). Subdomains of a listed name also match.
+malware-c2.example
+login-update.example
+cdn-static.invalid
+payroll-portal.example

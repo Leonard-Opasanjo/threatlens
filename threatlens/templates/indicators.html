@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Indicators · ThreatLens{% endblock %}
+{% block body %}
+<h1>Indicators</h1>
+<div class="card">
+<form class="inline" method="get" action="/indicators">
+  <select name="type"><option value="">any type</option>{% for t in types %}<option value="{{ t }}" {% if filters.type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}</select>
+  <select name="verdict"><option value="">any verdict</option>{% for v in verdicts %}<option value="{{ v }}" {% if filters.verdict == v %}selected{% endif %}>{{ v }}</option>{% endfor %}</select>
+  <select name="severity"><option value="">any severity</option>{% for s in severities %}<option value="{{ s }}" {% if filters.severity == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
+  <select name="status"><option value="">any status</option>{% for s in statuses %}<option value="{{ s }}" {% if filters.status == s %}selected{% endif %}>{{ s|replace("_", " ") }}</option>{% endfor %}</select>
+  <input type="text" name="q" value="{{ filters.q }}" placeholder="search value, tag or note">
+  <button type="submit" class="quiet">Filter</button>
+</form>
+</div>
+<div class="card">
+<table><tr><th>Severity</th><th>Verdict</th><th class="hide-sm">Conf.</th><th>Type</th><th>Indicator (defanged)</th><th class="hide-sm">Tags</th><th>Status</th><th class="hide-sm">Seen</th></tr>
+{% for r in rows %}
+<tr><td><span class="sev {{ r.severity }}">{{ r.severity }}</span></td><td><span class="verdict {{ r.verdict }}">{{ r.verdict }}</span></td><td class="hide-sm">{{ r.confidence }}</td>
+<td>{{ r.type }}</td><td class="mono"><a href="/indicators/{{ r.id }}">{{ r.value|defang(r.type) }}</a></td>
+<td class="hide-sm">{% for t in r.tags %}<span class="pill">{{ t }}</span> {% endfor %}</td><td>{{ r.status|replace("_", " ") }}</td><td class="hide-sm muted">{{ r.times_seen }}×</td></tr>
+{% endfor %}
+{% if not rows %}<tr><td colspan="8" class="muted">No indicators match.</td></tr>{% endif %}
+</table>
+</div>
+{% endblock %}
