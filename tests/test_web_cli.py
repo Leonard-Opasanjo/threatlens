@@ -1,4 +1,6 @@
+import inspect
 import json
+import re
 import subprocess
 import sys
 
@@ -46,6 +48,50 @@ def test_dashboard_rejects_bad_input(client):
     assert client.get("/imports/42/report.md").status_code == 404
     big = "x" * (5 * 1024 * 1024 + 1)
     assert client.post("/import", files={"file": ("big.txt", big, "text/plain")}).status_code == 413
+
+
+def test_oversized_request_is_refused_before_the_form_is_read(client):
+    from threatlens import web
+
+    assert not inspect.iscoroutinefunction(web.do_import)  # imports run in the thread pool, not on the event loop
+    r = client.post("/import", files={"file": ("big.txt", b"x" * (web.MAX_UPLOAD + 1024 * 1024 + 1), "text/plain")})
+    assert r.status_code == 413 and r.headers["content-type"].startswith("text/plain")  # the middleware answered
+
+
+def test_cross_site_requests_and_foreign_hosts_are_refused(client):
+    form = {"text": "203.0.113.45", "fmt": "text"}
+    for header in ({"origin": "https://attacker.example"}, {"origin": "null"}, {"referer": "https://attacker.example/"}):
+        assert client.post("/import", data=form, headers=header).status_code == 403
+    assert client.post("/import", data=form, headers={"origin": "http://localhost"}, follow_redirects=False).status_code == 303
+    assert client.post("/indicators/1/status", data={"status": "false_positive"},
+                       headers={"origin": "https://attacker.example"}).status_code == 403
+    assert client.get("/api/indicators/1").json()["status"] == "new"
+    assert client.get("/report.json", headers={"host": "rebind.attacker.example"}).status_code == 400  # DNS rebinding
+
+
+def test_dashboard_pages_show_no_live_indicator(client):
+    client.post("/import", data={"text": "http://malware-c2.example/panel/gate.php\nnot-an-ioc",
+                                 "source": "see http://malware-c2.example/x", "fmt": "text"})
+    pages = client.get("/").text + client.get("/imports/1").text + client.get("/indicators").text
+    for row in client.get("/api/indicators").json():
+        client.post(f"/indicators/{row['id']}/status", data={"status": "confirmed", "note": "blocked malware-c2.example"})
+        page = client.get(f"/indicators/{row['id']}").text
+        pages += re.sub(r'<input type="text" name="note"[^>]*>', "", page)  # the edit box keeps the note as typed
+    assert "malware-c2.example" not in pages and "blocked malware-c2[.]example" in pages
+    assert "1 skipped" in client.get("/imports/1").text
+
+
+def test_api_docs_page_is_off_and_the_schema_is_linked(client):
+    assert client.get("/api/docs").status_code == 404  # Swagger UI needs third-party scripts
+    assert client.get("/api/openapi.json").json()["info"]["title"] == "ThreatLens"
+    assert 'href="/api/openapi.json"' in client.get("/").text
+
+
+def test_cli_exit_code_and_skipped_count(tmp_path, capsys):
+    (tmp_path / "none.csv").write_text("value\n203.0.113.0/24\nnot-an-ioc\n")
+    assert main(["analyse", str(tmp_path / "none.csv")]) == 2 and "2 skipped" in capsys.readouterr().err
+    (tmp_path / "some.txt").write_text("203.0.113.45\nnot-an-ioc\n")
+    assert main(["analyse", str(tmp_path / "some.txt")]) == 0 and "1 skipped" in capsys.readouterr().out
 
 
 def test_cli_analyse_import_list_demo(tmp_path, capsys):

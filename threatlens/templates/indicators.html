@@ -12,12 +12,13 @@
   <button type="submit" class="quiet">Filter</button>
 </form>
 </div>
+{% if more %}<div class="notice">Showing the {{ rows|length }} most severe matches; narrow the filters, or export the report for all of them.</div>{% endif %}
 <div class="card">
 <table><tr><th>Severity</th><th>Verdict</th><th class="hide-sm">Conf.</th><th>Type</th><th>Indicator (defanged)</th><th class="hide-sm">Tags</th><th>Status</th><th class="hide-sm">Seen</th></tr>
 {% for r in rows %}
 <tr><td><span class="sev {{ r.severity }}">{{ r.severity }}</span></td><td><span class="verdict {{ r.verdict }}">{{ r.verdict }}</span></td><td class="hide-sm">{{ r.confidence }}</td>
 <td>{{ r.type }}</td><td class="mono"><a href="/indicators/{{ r.id }}">{{ r.value|defang(r.type) }}</a></td>
-<td class="hide-sm">{% for t in r.tags %}<span class="pill">{{ t }}</span> {% endfor %}</td><td>{{ r.status|replace("_", " ") }}</td><td class="hide-sm muted">{{ r.times_seen }}×</td></tr>
+<td class="hide-sm">{% for t in r.tags %}<span class="pill">{{ t|defang_text }}</span> {% endfor %}</td><td>{{ r.status|replace("_", " ") }}</td><td class="hide-sm muted">{{ r.times_seen }}×</td></tr>
 {% endfor %}
 {% if not rows %}<tr><td colspan="8" class="muted">No indicators match.</td></tr>{% endif %}
 </table>

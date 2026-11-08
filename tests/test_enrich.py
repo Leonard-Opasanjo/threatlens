@@ -59,6 +59,43 @@ def test_online_feed_fetch_is_opt_in_and_cached(tmp_path):
     assert len(calls) == 2  # served from cache the second time
 
 
+def test_feed_failure_is_reported_and_falls_back_to_the_stale_copy(tmp_path):
+    import os
+
+    import httpx
+    import pytest
+
+    def down(url):
+        raise httpx.ConnectError("network unreachable")
+    with pytest.raises(OSError, match="could not be downloaded"):  # what the CLI and the dashboard report
+        load_feeds(FEEDS / "feeds.json", online=True, cache_dir=tmp_path, fetch=down)
+    stale = tmp_path / "feodo-tracker.txt"
+    stale.write_text("203.0.113.250\n")
+    os.utime(stale, (0, 0))
+    (tmp_path / "urlhaus-online.txt").write_text("")
+    os.utime(tmp_path / "urlhaus-online.txt", (0, 0))
+    feeds = load_feeds(FEEDS / "feeds.json", online=True, cache_dir=tmp_path, fetch=down)
+    assert any(f.name == "feodo-tracker" and "203.0.113.250" in f.entries for f in feeds)
+
+
+def test_allow_list_vouches_for_domains_not_urls():
+    for url in ("https://raw.githubusercontent.com/a/x/main/stealer.ps1", "https://bucket.s3.amazonaws.com/inv.exe",
+                "https://github.com/a/x/releases/download/v1/setup.exe", "http://malware-c2.example\\@google.com/x"):
+        assert not any(s.verdict == "benign" for s in sigs(url)), url
+    assert score(sigs("https://github.com/a/x/releases/download/v1/setup.exe")).verdict == "suspicious"
+    assert score(sigs("http://malware-c2.example\\@google.com/x")).verdict == "malicious"
+    assert score(sigs("github.com")).verdict == "benign"
+
+
+def test_feed_entries_are_normalised_like_indicators():
+    feed = ListFeed("custom", "url", ListFeed.parse("http://203.0.113.45/bins/Mozi.m\nhxxp://Evil[.]Example:80/x\n"))
+    assert feed.signals(classify("http://203.0.113.45/bins/Mozi.m")) and feed.signals(classify("http://evil.example/x"))
+    ips = ListFeed("ips", "ip", ListFeed.parse("2001:0db8:0000:0000:0000:0000:0000:0001\n198.18.0.0/15\n"))
+    assert ips.signals(classify("2001:db8::1")) and ips.signals(classify("198.19.4.4"))
+    assert ips.signals(classify("http://198.18.7.7/a")) and not ips.signals(classify("203.0.113.7"))
+    assert any(s.source == "local-malicious-ips" for s in sigs("::ffff:203.0.113.45"))  # bundled list, mapped form
+
+
 def test_dns_source_uses_injected_resolver():
     dns = Dns(resolver=lambda ind: ["203.0.113.5"])
     (s,) = dns.signals(classify("evil.example"))

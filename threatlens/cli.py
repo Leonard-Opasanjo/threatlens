@@ -68,8 +68,16 @@ def _print(rows: list[dict]) -> None:
               f"{defang(r['value'], r['type'])}  [{src}]")
 
 
+def _skipped(indicators) -> str:
+    """How many values in the file were not an indicator of any type, so nothing disappears silently."""
+    return f", {indicators.skipped} skipped" if getattr(indicators, "skipped", 0) else ""
+
+
 def analyse_cmd(args: argparse.Namespace) -> int:
     indicators = load_file(args.file)
+    if not indicators:
+        raise ValueError(f"no indicators found in the file{_skipped(indicators)}")
+    skipped = _skipped(indicators)
     keys = {i.key for i in indicators}
     for ind in list(indicators):
         host = host_of(ind)
@@ -89,7 +97,7 @@ def analyse_cmd(args: argparse.Namespace) -> int:
     order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
     rows.sort(key=lambda r: (order[r["severity"]], r["type"], r["value"]))
     counts = {v: sum(r["verdict"] == v for r in rows) for v in ("malicious", "suspicious", "benign", "unknown")}
-    print(f"{args.file}: {len(rows)} indicators ({', '.join(f'{n} {v}' for v, n in counts.items() if n)})")
+    print(f"{args.file}: {len(rows)} indicators ({', '.join(f'{n} {v}' for v, n in counts.items() if n)}){skipped}")
     _print(rows)
     if args.report:
         Path(args.report).write_text(investigation_report(rows, f"Investigation report: {Path(args.file).name}"),
@@ -108,11 +116,11 @@ def import_cmd(args: argparse.Namespace) -> int:
     name = args.source or Path(args.file).name
     indicators = load_file(args.file, name)
     if not indicators:
-        raise ValueError("no indicators found in the file")
+        raise ValueError(f"no indicators found in the file{_skipped(indicators)}")
     counts = db.ingest(indicators, _enricher(args.online, args.feeds), name, name, args.online)
     print(f"import {counts['import_id']}: {counts['total']} indicators, {counts['new']} new, "
-          f"{counts['updated']} updated, {counts['derived']} derived hosts")
-    rows = db.with_signals(db.list(import_id=counts["import_id"]))
+          f"{counts['updated']} updated, {counts['derived']} derived hosts{_skipped(indicators)}")
+    rows = db.with_signals(db.list(import_id=counts["import_id"], limit=None))
     _print(rows)
     if args.report:
         Path(args.report).write_text(investigation_report(rows, f"Investigation report: {name}"), encoding="utf-8")
@@ -123,7 +131,7 @@ def import_cmd(args: argparse.Namespace) -> int:
 def list_cmd(args: argparse.Namespace) -> int:
     from .db import Store
 
-    rows = Store(args.db).with_signals(Store(args.db).list(verdict=args.verdict, type=args.type))
+    rows = Store(args.db).with_signals(Store(args.db).list(verdict=args.verdict, type=args.type, limit=None))
     print(f"{len(rows)} indicators")
     _print(rows)
     return 0
@@ -135,8 +143,10 @@ def demo_cmd(args: argparse.Namespace) -> int:
     db = Store(args.db)
     enr = _enricher(False, None)
     for f in sorted(SAMPLES.iterdir()):
-        counts = db.ingest(load_file(f, f.name), enr, f.name, f.name)
-        print(f"import {counts['import_id']}: {f.name}: {counts['total']} indicators, {counts['new']} new")
+        indicators = load_file(f, f.name)
+        counts = db.ingest(indicators, enr, f.name, f.name)
+        print(f"import {counts['import_id']}: {f.name}: {counts['total']} indicators, {counts['new']} new"
+              f"{_skipped(indicators)}")
     return 0
 
 

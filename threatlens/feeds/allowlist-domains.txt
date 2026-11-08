@@ -1,6 +1,8 @@
 # Widely used services. Seeing one of these in a log is not evidence of anything by itself.
+# Subdomains match too, so hosting where anyone can publish (amazonaws.com, githubusercontent.com, googleapis.com,
+# akamaihd.net, akamaized.net) is deliberately not listed. Only domains become benign; a URL on a listed host
+# gets an informational note, because the host vouches for nothing uploaded to it.
 google.com
-googleapis.com
 gstatic.com
 microsoft.com
 windowsupdate.com
@@ -8,11 +10,7 @@ office.com
 apple.com
 icloud.com
 github.com
-githubusercontent.com
 cloudflare.com
-amazonaws.com
-akamaihd.net
-akamaized.net
 mozilla.org
 ubuntu.com
 debian.org

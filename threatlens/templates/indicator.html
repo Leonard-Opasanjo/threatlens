@@ -6,17 +6,17 @@
 <div class="card">
   <table>
     <tr><th>Verdict</th><td><span class="verdict {{ row.verdict }}">{{ row.verdict }}</span> · confidence {{ row.confidence }}</td></tr>
-    <tr><th>Type</th><td>{{ row.type }}{% if row.derived_from %} · derived from <span class="mono">{{ row.derived_from }}</span>{% endif %}</td></tr>
-    <tr><th>Submitted as</th><td class="mono">{{ row.raw or row.value }}</td></tr>
-    <tr><th>Source</th><td>{{ row.source or "—" }}{% if row.first_seen %} · first seen {{ row.first_seen }}{% endif %} · last seen {{ row.last_seen|replace("T", " ") }} · seen {{ row.times_seen }}×</td></tr>
-    <tr><th>Tags</th><td>{% for t in row.tags %}<span class="pill">{{ t }}</span> {% endfor %}{% if not row.tags %}—{% endif %}</td></tr>
-    <tr><th>Status</th><td>{{ row.status|replace("_", " ") }}{% if row.note %} · {{ row.note }}{% endif %}</td></tr>
+    <tr><th>Type</th><td>{{ row.type }}{% if row.derived_from %} · derived from <span class="mono">{{ row.derived_from|defang_text }}</span>{% endif %}</td></tr>
+    <tr><th>Submitted as</th><td class="mono">{{ (row.raw or row.value)|defang_text }}</td></tr>
+    <tr><th>Source</th><td>{{ (row.source or "—")|defang_text }}{% if row.first_seen %} · first seen {{ row.first_seen }}{% endif %} · last seen {{ row.last_seen|replace("T", " ") }} · seen {{ row.times_seen }}×</td></tr>
+    <tr><th>Tags</th><td>{% for t in row.tags %}<span class="pill">{{ t|defang_text }}</span> {% endfor %}{% if not row.tags %}—{% endif %}</td></tr>
+    <tr><th>Status</th><td>{{ row.status|replace("_", " ") }}{% if row.note %} · {{ row.note|defang_text }}{% endif %}</td></tr>
   </table>
 </div>
 
 <h2>Signals</h2>
 <div class="card">
-{% for s in row.signals %}<div class="sig"><span class="verdict {{ s.verdict }}">{{ s.verdict }}</span> <strong>{{ s.source }}</strong>{% if s.weight %} <span class="muted">weight {{ s.weight }}</span>{% endif %}<br>{{ s.note }}</div>{% endfor %}
+{% for s in row.signals %}<div class="sig"><span class="verdict {{ s.verdict }}">{{ s.verdict }}</span> <strong>{{ s.source }}</strong>{% if s.weight %} <span class="muted">weight {{ s.weight }}</span>{% endif %}<br>{{ s.note|defang_text }}</div>{% endfor %}
 {% if not row.signals %}<p class="muted">No source had anything to say about this indicator.</p>{% endif %}
 </div>
 

@@ -32,7 +32,7 @@
 {% else %}
 <table><tr><th>#</th><th>Name</th><th>When</th><th>Indicators</th><th>New</th><th>Updated</th><th>Derived</th><th class="hide-sm">Online</th><th></th></tr>
 {% for i in imports %}
-<tr><td><a href="/imports/{{ i.id }}">{{ i.id }}</a></td><td><a href="/imports/{{ i.id }}">{{ i.name }}</a></td><td class="muted">{{ i.at|replace("T", " ") }}</td>
+<tr><td><a href="/imports/{{ i.id }}">{{ i.id }}</a></td><td><a href="/imports/{{ i.id }}">{{ i.name|defang_text }}</a></td><td class="muted">{{ i.at|replace("T", " ") }}</td>
 <td>{{ i.total }}</td><td>{{ i.new }}</td><td>{{ i.updated }}</td><td>{{ i.derived }}</td><td class="hide-sm">{{ "yes" if i.online else "no" }}</td>
 <td><a href="/imports/{{ i.id }}/report.md">report</a></td></tr>
 {% endfor %}

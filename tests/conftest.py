@@ -15,6 +15,6 @@ def client(tmp_path):
     from threatlens.db import Store
 
     web.app.state.store = Store(tmp_path / "t.db")
-    with TestClient(web.app) as c:
+    with TestClient(web.app, base_url="http://localhost") as c:  # an allowed host name, as a browser would send
         yield c
     del web.app.state.store

@@ -13,10 +13,14 @@ ACTION = {"malicious": "Block at the perimeter and DNS; search logs for any cont
                        "as potentially compromised.",
           "suspicious": "Do not block on this alone. Check who or what referenced it, look it up in a second source, "
                         "and watch for further activity.",
-          "benign": "No action. Listed as a well-known service; remove from the indicator set unless the full URL or "
-                    "path is specific.",
+          "benign": "No action. The domain is a well-known service; remove it from the indicator set.",
           "unknown": "No source had information. Keep it in the watch-list and re-run enrichment later or add a "
                      "source."}
+
+
+def _code(value: str, kind: str) -> str:
+    """A defanged value for a Markdown code span: a backtick would end the span and a pipe would split the table."""
+    return defang(value, kind).replace("`", "%60").replace("|", "%7C")
 
 
 def investigation_report(indicators: list[dict], title: str = "ThreatLens investigation report",
@@ -24,7 +28,7 @@ def investigation_report(indicators: list[dict], title: str = "ThreatLens invest
     generated = generated or datetime.now(UTC)
     by_verdict = {v: [i for i in indicators if i["verdict"] == v] for v in VERDICTS}
     by_sev = {s: sum(1 for i in indicators if i["severity"] == s) for s in SEVERITIES}
-    lines = [f"# {title}", "",
+    lines = [f"# {defang_text(title)}", "",
              f"Generated {generated:%Y-%m-%d %H:%M} UTC by ThreatLens {__version__} · {len(indicators)} indicators"
              + (f" · {context}" if context else ""), "",
              "All indicators in this report are defanged (`hxxp`, `[.]`) so they cannot be followed by accident.", ""]
@@ -43,24 +47,24 @@ def investigation_report(indicators: list[dict], title: str = "ThreatLens invest
             sources = ", ".join(sorted({s["source"] for s in i.get("signals", []) if s["verdict"] != "info"}))
             sources = sources or "structural"
             lines.append(f"| {i['severity']} | {i['verdict']} | {i['confidence']} | {i['type']} | "
-                         f"`{defang(i['value'], i['type'])}` | {sources} | {i.get('status', 'new')} |")
+                         f"`{_code(i['value'], i['type'])}` | {sources} | {i.get('status', 'new')} |")
     lines.append("")
 
     lines += ["## Details", ""]
     for i in action:
-        lines.append(f"### `{defang(i['value'], i['type'])}` ({i['type']}, {i['verdict']}, {i['severity']})")
+        lines.append(f"### `{_code(i['value'], i['type'])}` ({i['type']}, {i['verdict']}, {i['severity']})")
         lines.append("")
         if i.get("tags"):
-            lines.append(f"Tags: {', '.join(i['tags'])}  ")
+            lines.append(f"Tags: {defang_text(', '.join(i['tags']))}  ")
         if i.get("source"):
-            lines.append(f"Source: {i['source']}  ")
+            lines.append(f"Source: {defang_text(i['source'])}  ")
         if i.get("derived_from"):
             lines.append("Derived from a submitted URL.  ")
         for s in i.get("signals", []):
             lines.append(f"- **{s['verdict']}** ({s['source']}): {defang_text(s['note'])}")
         lines.append(f"- Recommended: {ACTION[i['verdict']]}")
         if i.get("note"):
-            lines.append(f"- Analyst note: {i['note']}")
+            lines.append(f"- Analyst note: {defang_text(i['note'])}")
         lines.append("")
 
     others = by_verdict["benign"] + by_verdict["unknown"]
@@ -68,7 +72,8 @@ def investigation_report(indicators: list[dict], title: str = "ThreatLens invest
         lines += ["## Benign and unknown", "", "| Verdict | Type | Indicator | Note |", "|---|---|---|---|"]
         for i in others:
             note = next((s["note"] for s in i.get("signals", []) if s["verdict"] in ("benign", "info")), "")
-            lines.append(f"| {i['verdict']} | {i['type']} | `{defang(i['value'], i['type'])}` | {defang_text(note)} |")
+            lines.append(f"| {i['verdict']} | {i['type']} | `{_code(i['value'], i['type'])}` | "
+                         f"{defang_text(note).replace('|', '%7C')} |")
         lines.append("")
 
     lines += ["## Method and limits", "",

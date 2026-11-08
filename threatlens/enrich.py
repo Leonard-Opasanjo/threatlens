@@ -14,7 +14,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from .ioc import Indicator
+import httpx
+
+from .ioc import Indicator, classify
 
 FEEDS_DIR = Path(__file__).resolve().parent / "feeds"
 VERDICTS = ("malicious", "suspicious", "benign", "unknown")
@@ -109,19 +111,31 @@ class ListFeed:
                  description: str = ""):
         self.name, self.kind, self.entries, self.verdict, self.weight = name, kind, entries, verdict, weight
         self.description = description
+        self.networks = [n for n in map(_network, entries) if n]  # CIDR entries in an address list
 
     @staticmethod
     def parse(text: str) -> set[str]:
+        """Entries normalised exactly like indicators, so a listed value matches however the list writes it."""
         out = set()
         for line in text.splitlines():
             line = line.split("#", 1)[0].strip()
             if not line:
                 continue
-            # hosts-file style "127.0.0.1 bad.example" -> keep the host
+            # hosts-file style "127.0.0.1 bad.example" -> keep the host (B104: not a bind address)
             parts = line.split()
-            line = parts[-1] if len(parts) == 2 and parts[0] in ("127.0.0.1", "0.0.0.0") else parts[0]  # nosec B104: hosts-file syntax, not a bind address
-            out.add(line.lower().rstrip("."))
+            line = parts[-1] if len(parts) == 2 and parts[0] in ("127.0.0.1", "0.0.0.0") else parts[0]  # nosec B104
+            ind = classify(line)
+            out.add(ind.value if ind else line.lower().rstrip("."))
         return out
+
+    def _ip_hit(self, value: str) -> str | None:
+        if value in self.entries:
+            return value
+        try:
+            ip = ipaddress.ip_address(value)
+        except ValueError:
+            return None
+        return next((str(n) for n in self.networks if ip in n), None)
 
     def _domain_hit(self, host: str) -> str | None:
         parts = host.split(".")
@@ -133,14 +147,14 @@ class ListFeed:
 
     def signals(self, ind: Indicator) -> list[Signal]:
         hit = None
-        if self.kind == "ip" and ind.type in ("ipv4", "ipv6") and ind.value in self.entries:
-            hit = ind.value
+        if self.kind == "ip" and ind.type in ("ipv4", "ipv6"):
+            hit = self._ip_hit(ind.value)
         elif self.kind == "domain" and ind.type == "domain":
             hit = self._domain_hit(ind.value)
         elif self.kind == "domain" and ind.type == "url":
             hit = self._domain_hit(urlsplit(ind.value).hostname or "")
-        elif self.kind == "ip" and ind.type == "url" and (urlsplit(ind.value).hostname or "") in self.entries:
-            hit = urlsplit(ind.value).hostname
+        elif self.kind == "ip" and ind.type == "url":
+            hit = self._ip_hit(urlsplit(ind.value).hostname or "")
         elif self.kind == "url" and ind.type == "url" and (ind.value in self.entries
                                                            or ind.value.rstrip("/") in self.entries):
             hit = ind.value
@@ -149,8 +163,18 @@ class ListFeed:
         if hit is None:
             return []
         what = "listed" if self.verdict != "benign" else "allow-listed"
-        return [Signal(self.name, self.verdict, self.weight, f"{hit} is {what} in {self.name}"
+        verdict, weight = self.verdict, self.weight
+        if verdict == "benign" and ind.type == "url":  # a well-known host vouches for nothing anyone uploaded to it
+            verdict, weight, what = "info", 0, "allow-listed (the host, not this URL)"
+        return [Signal(self.name, verdict, weight, f"{hit} is {what} in {self.name}"
                        + (f" ({self.description})" if self.description else ""))]
+
+
+def _network(entry: str) -> ipaddress.IPv4Network | ipaddress.IPv6Network | None:
+    try:
+        return ipaddress.ip_network(entry, strict=False) if "/" in entry else None
+    except ValueError:
+        return None
 
 
 def load_feeds(config: str | Path | None = None, online: bool = False, cache_dir: str | Path | None = None,
@@ -184,13 +208,16 @@ def _cached_fetch(url: str, name: str, cache_dir, fetch) -> str:
     if path.exists() and time.time() - path.stat().st_mtime < 86400:
         return path.read_text(encoding="utf-8")
     if fetch is None:
-        import httpx
-
         def fetch(u: str) -> str:
             r = httpx.get(u, timeout=20, follow_redirects=True, headers={"User-Agent": "ThreatLens feed fetch"})
             r.raise_for_status()
             return r.text
-    text = fetch(url)
+    try:
+        text = fetch(url)
+    except (OSError, httpx.HTTPError) as e:  # httpx errors are not OSError, which is what the callers report
+        if path.exists():  # yesterday's list beats no list
+            return path.read_text(encoding="utf-8")
+        raise OSError(f"feed {name} could not be downloaded: {e}") from e
     path.write_text(text, encoding="utf-8")
     return text
 

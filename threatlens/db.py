@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from .enrich import SEVERITIES, VERDICTS, Enricher, score
+from .enrich import SEVERITIES, VERDICTS, Enricher, Signal, score
 from .ioc import Indicator, host_of
 
 STATUSES = ("new", "investigating", "confirmed", "false_positive", "closed")
@@ -16,7 +16,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS imports (
     id INTEGER PRIMARY KEY, name TEXT NOT NULL, source TEXT NOT NULL DEFAULT '', at TEXT NOT NULL,
     total INTEGER NOT NULL DEFAULT 0, new INTEGER NOT NULL DEFAULT 0, updated INTEGER NOT NULL DEFAULT 0,
-    derived INTEGER NOT NULL DEFAULT 0, online INTEGER NOT NULL DEFAULT 0);
+    derived INTEGER NOT NULL DEFAULT 0, online INTEGER NOT NULL DEFAULT 0, skipped INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS indicators (
     id INTEGER PRIMARY KEY, type TEXT NOT NULL, value TEXT NOT NULL, raw TEXT NOT NULL DEFAULT '',
     source TEXT NOT NULL DEFAULT '', tags_json TEXT NOT NULL DEFAULT '[]', first_seen TEXT NOT NULL DEFAULT '',
@@ -26,9 +26,14 @@ CREATE TABLE IF NOT EXISTS indicators (
 CREATE TABLE IF NOT EXISTS signals (
     id INTEGER PRIMARY KEY, indicator_id INTEGER NOT NULL REFERENCES indicators(id), source TEXT NOT NULL,
     verdict TEXT NOT NULL, weight INTEGER NOT NULL, note TEXT NOT NULL, at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS import_items (
+    import_id INTEGER NOT NULL REFERENCES imports(id), indicator_id INTEGER NOT NULL REFERENCES indicators(id),
+    PRIMARY KEY (import_id, indicator_id));
 CREATE INDEX IF NOT EXISTS signals_ind ON signals(indicator_id);
 CREATE INDEX IF NOT EXISTS indicators_verdict ON indicators(verdict, severity);
 """
+BY_SEVERITY = (" ORDER BY CASE severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 "
+               "WHEN 'low' THEN 3 ELSE 4 END, last_seen DESC")
 
 
 def _now() -> str:
@@ -40,6 +45,8 @@ class Store:
         self.path = str(path)
         with self._conn() as c:
             c.executescript(SCHEMA)
+            if "skipped" not in {r["name"] for r in c.execute("PRAGMA table_info(imports)")}:  # older databases
+                c.execute("ALTER TABLE imports ADD COLUMN skipped INTEGER NOT NULL DEFAULT 0")
 
     def _conn(self) -> sqlite3.Connection:
         c = sqlite3.connect(self.path)
@@ -59,27 +66,34 @@ class Store:
                 batch.append(host)
                 keys.add(host.key)
                 derived += 1
-        counts = {"total": len(batch), "new": 0, "updated": 0, "derived": derived}
+        skipped = getattr(indicators, "skipped", 0)  # values the importer could not classify (ioc.Parsed)
+        counts = {"total": len(batch), "new": 0, "updated": 0, "derived": derived, "skipped": skipped}
+        sources = json.dumps([s.name for s in enricher.sources])
         with self._conn() as c:
-            cur = c.execute("INSERT INTO imports (name, source, at, online) VALUES (?,?,?,?)",
-                            (name[:200], source[:200], _now(), int(online)))
+            cur = c.execute("INSERT INTO imports (name, source, at, online, skipped) VALUES (?,?,?,?,?)",
+                            (name[:200], source[:200], _now(), int(online), skipped))
             import_id = cur.lastrowid
             for ind in batch:
                 signals = enricher.enrich(ind)
-                sc = score(signals)
                 existing = c.execute("SELECT id, tags_json, source, first_seen, times_seen FROM indicators "
                                      "WHERE type = ? AND value = ?", (ind.type, ind.value)).fetchone()
                 if existing:
+                    ind_id = existing["id"]
+                    # replace what this run's sources say; keep the rest (an online feed's hit on an offline run)
+                    c.execute("DELETE FROM signals WHERE indicator_id = ? AND source IN "
+                              "(SELECT value FROM json_each(?))", (ind_id, sources))
+                    kept = [Signal(**dict(r)) for r in c.execute("SELECT source, verdict, weight, note FROM signals "
+                                                                 "WHERE indicator_id = ?", (ind_id,))]
+                    sc = score(kept + signals)
                     tags = sorted(set(json.loads(existing["tags_json"])) | set(ind.tags))
                     c.execute("UPDATE indicators SET last_seen = ?, tags_json = ?, source = ?, first_seen = ?, "
                               "verdict = ?, severity = ?, confidence = ?, times_seen = times_seen + 1 WHERE id = ?",
                               (_now(), json.dumps(tags), existing["source"] or ind.source,
                                existing["first_seen"] or ind.first_seen, sc.verdict, sc.severity, sc.confidence,
-                               existing["id"]))
-                    ind_id = existing["id"]
-                    c.execute("DELETE FROM signals WHERE indicator_id = ?", (ind_id,))
+                               ind_id))
                     counts["updated"] += 1
                 else:
+                    sc = score(signals)
                     cur = c.execute(
                         "INSERT INTO indicators (type, value, raw, source, tags_json, first_seen, last_seen, verdict, "
                         "severity, confidence, derived_from, import_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -88,6 +102,8 @@ class Store:
                          import_id))
                     ind_id = cur.lastrowid
                     counts["new"] += 1
+                c.execute("INSERT OR IGNORE INTO import_items (import_id, indicator_id) VALUES (?,?)",
+                          (import_id, ind_id))
                 for s in signals:
                     c.execute("INSERT INTO signals (indicator_id, source, verdict, weight, note, at) "
                               "VALUES (?,?,?,?,?,?)", (ind_id, s.source, s.verdict, s.weight, s.note[:500], _now()))
@@ -105,7 +121,8 @@ class Store:
 
     def list(self, type: str | None = None, verdict: str | None = None, severity: str | None = None,
              status: str | None = None, q: str | None = None, import_id: int | None = None,
-             limit: int = 500) -> list[dict]:
+             limit: int | None = 500) -> list[dict]:
+        """Matching indicators, most severe first, then most recent; `limit=None` returns all of them."""
         where, params = [], []
         for col, val in (("type", type), ("verdict", verdict), ("severity", severity), ("status", status)):
             if val:
@@ -114,16 +131,14 @@ class Store:
         if q:
             where.append("(value LIKE ? OR tags_json LIKE ? OR note LIKE ?)")
             params += [f"%{q}%"] * 3
-        if import_id:
-            where.append("(import_id = ? OR id IN (SELECT indicator_id FROM signals WHERE at >= "
-                         "(SELECT at FROM imports WHERE id = ?)))")
+        if import_id:  # every indicator the import touched; imports made before import_items still show their new ones
+            where.append("(import_id = ? OR id IN (SELECT indicator_id FROM import_items WHERE import_id = ?))")
             params += [import_id, import_id]
         # column names come from the fixed tuple above; every value is a bound parameter
         sql = "SELECT * FROM indicators" + (" WHERE " + " AND ".join(where) if where else "")  # nosec B608
         with self._conn() as c:
-            rows = [self._row(r) for r in c.execute(sql + " ORDER BY last_seen DESC LIMIT ?", params + [limit])]
-        rows.sort(key=lambda d: SEVERITIES.index(d["severity"]))  # stable: keeps the recency order within a severity
-        return rows
+            return [self._row(r) for r in c.execute(sql + BY_SEVERITY + " LIMIT ?",
+                                                    params + [-1 if limit is None else limit])]
 
     def get(self, ind_id: int) -> dict | None:
         with self._conn() as c:
